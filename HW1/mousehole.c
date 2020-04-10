@@ -95,7 +95,8 @@ ssize_t mousehole_proc_write(struct file *file, const char __user *ubuf, size_t 
 			isEnableBlockFile = 1;
 			break;
 		case PREVENT_KILL:
-
+			sscanf(buf, "%d %d", &type, &pk_uid);
+			isEnableProtectKill = 1;
 			break;
 		case UNDO_FILE:
 			bf_uid = 0;
@@ -104,6 +105,7 @@ ssize_t mousehole_proc_write(struct file *file, const char __user *ubuf, size_t 
 			break;
     	case UNDO_KILL:
 			pk_uid = 0;
+			isEnableProtectKill = 0;
 			break;
 	}
 

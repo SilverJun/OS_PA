@@ -1,119 +1,161 @@
 #include <linux/syscalls.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
+#include <linux/sched.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include <linux/kallsyms.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/cred.h>
+#include <linux/slab.h>
 #include <asm/unistd.h>
+
+#include "msg.h"
 
 MODULE_LICENSE("GPL");
 
-char filepath[128] = { 0x0, } ;
+int isEnableBlockFile = 0;
+int isEnableProtectKill = 0;
 void ** sctable ;
-int count = 0 ;
 
-asmlinkage int (*orig_sys_open)(const char __user * filename, int flags, umode_t mode) ; 
+char bf_filename[FNAME_SIZE] = { 0x0, } ;
+uid_t bf_uid;
+uid_t pk_uid;
 
-asmlinkage int openhook_sys_open(const char __user * filename, int flags, umode_t mode)
-{
-	char fname[256] ;
+asmlinkage int (*orig_sys_open)(const char __user * filename, int flags, umode_t mode);
+asmlinkage int (*orig_sys_kill)(pid_t pid, int sig);
 
-	copy_from_user(fname, filename, 256) ;
+asmlinkage int mousehole_sys_open(const char __user * filename, int flags, umode_t mode) {
+	if (!isEnableBlockFile) return orig_sys_open(filename, flags, mode);
 
-	if (filepath[0] != 0x0 && strcmp(filepath, fname) == 0) {
-		count++ ;
+	char fname[FNAME_SIZE] = {0x0};
+
+	copy_from_user(fname, filename, FNAME_SIZE) ;
+
+	//printk(KERN_INFO "mousehole: hook open : %s\n", fname);
+	if (strstr(fname, bf_filename) != NULL && current->cred->uid.val == bf_uid) {
+		printk(KERN_INFO "mousehole: Block file open - %s\n", fname);
+		return -EACCES;
 	}
 	return orig_sys_open(filename, flags, mode) ;
 }
 
+asmlinkage int mousehole_sys_kill(pid_t pid, int sig) {
+	if (!isEnableProtectKill) return orig_sys_kill(pid, sig);
+
+	//printk(KERN_INFO "mousehole: mousehole_sys_kill hook orig_sys_kill\n");
+	struct task_struct* t;
+
+	for_each_process(t) {
+		if (t->pid == pid && t->cred->uid.val == pk_uid) {
+			printk(KERN_INFO "mousehole: Protect kill - %s:%d\n", t->comm, t->cred->uid.val);
+			return -EACCES;
+		}
+	}
+
+	return orig_sys_kill(pid, sig);
+}
 
 static 
-int openhook_proc_open(struct inode *inode, struct file *file) {
+int mousehole_proc_open(struct inode *inode, struct file *file) {
 	return 0 ;
 }
 
 static 
-int openhook_proc_release(struct inode *inode, struct file *file) {
+int mousehole_proc_release(struct inode *inode, struct file *file) {
 	return 0 ;
 }
 
 static
-ssize_t openhook_proc_read(struct file *file, char __user *ubuf, size_t size, loff_t *offset) 
-{
-	char buf[256] ;
-	ssize_t toread ;
-
-	sprintf(buf, "%s:%d\n", filepath, count) ;
-
-	toread = strlen(buf) >= *offset + size ? size : strlen(buf) - *offset ;
-
-	if (copy_to_user(ubuf, buf + *offset, toread))
-		return -EFAULT ;	
-
-	*offset = *offset + toread ;
-
-	return toread ;
+ssize_t mousehole_proc_read(struct file *file, char __user *ubuf, size_t size, loff_t *offset) {
+	return 0;
 }
 
 static 
-ssize_t openhook_proc_write(struct file *file, const char __user *ubuf, size_t size, loff_t *offset) 
+ssize_t mousehole_proc_write(struct file *file, const char __user *ubuf, size_t size, loff_t *offset) 
 {
-	char buf[128] ;
+	char buf[MSG_SIZE] = {0x0};
 
-	if (*offset != 0 || size > 128)
-		return -EFAULT ;
+	if (*offset != 0 || size > MSG_SIZE)
+		return -EFAULT;
 
 	if (copy_from_user(buf, ubuf, size))
-		return -EFAULT ;
+		return -EFAULT;
 
-	sscanf(buf,"%s", filepath) ;
-	count = 0 ;
-	*offset = strlen(buf) ;
+	
+	int type = 0;
 
-	return *offset ;
+	sscanf(buf, "%d", &type); 
+	printk(KERN_INFO "mousehole: Msg type is: %d\n", type);
+
+	switch (type) {
+		case BLOCK_FILE:
+			sscanf(buf, "%d %d %s", &type, &bf_uid, bf_filename);
+			isEnableBlockFile = 1;
+			break;
+		case PREVENT_KILL:
+
+			break;
+		case UNDO_FILE:
+			bf_uid = 0;
+			bf_filename[0] = '\0';
+			isEnableBlockFile = 0;
+			break;
+    	case UNDO_KILL:
+			pk_uid = 0;
+			break;
+	}
+
+	printk(KERN_INFO "mousehole: received msg: %s\n", buf);
+
+	*offset = strlen(buf);
+
+	return *offset;
 }
 
-static const struct file_operations openhook_fops = {
+static const struct file_operations mousehole_fops = {
 	.owner = 	THIS_MODULE,
-	.open = 	openhook_proc_open,
-	.read = 	openhook_proc_read,
-	.write = 	openhook_proc_write,
+	.open = 	mousehole_proc_open,
+	.read = 	mousehole_proc_read,
+	.write = 	mousehole_proc_write,
 	.llseek = 	seq_lseek,
-	.release = 	openhook_proc_release,
+	.release = 	mousehole_proc_release,
 } ;
 
 static 
-int __init openhook_init(void) {
+int __init mousehole_init(void) {
 	unsigned int level ; 
 	pte_t * pte ;
 
-	proc_create("openhook", S_IRUGO | S_IWUGO, NULL, &openhook_fops) ;
+	proc_create("mousehole", S_IRUGO | S_IWUGO, NULL, &mousehole_fops) ;
 
 	sctable = (void *) kallsyms_lookup_name("sys_call_table") ;
 
 	orig_sys_open = sctable[__NR_open] ;
+	orig_sys_kill = sctable[__NR_kill] ;
 
 	pte = lookup_address((unsigned long) sctable, &level) ;
 	if (pte->pte &~ _PAGE_RW) 
 		pte->pte |= _PAGE_RW ;	
 
-	sctable[__NR_open] = openhook_sys_open ;
+	sctable[__NR_open] = mousehole_sys_open;
+	sctable[__NR_kill] = mousehole_sys_kill;
 
 	return 0;
 }
 
 static 
-void __exit openhook_exit(void) {
+void __exit mousehole_exit(void) {
 	unsigned int level ;
 	pte_t * pte ;
-	remove_proc_entry("openhook", NULL) ;
+	remove_proc_entry("mousehole", NULL) ;
 
-	sctable[__NR_open] = orig_sys_open ;
+	sctable[__NR_open] = orig_sys_open;
+	sctable[__NR_kill] = orig_sys_kill;
 	pte = lookup_address((unsigned long) sctable, &level) ;
 	pte->pte = pte->pte &~ _PAGE_RW ;
 }
 
-module_init(openhook_init);
-module_exit(openhook_exit);
+module_init(mousehole_init);
+module_exit(mousehole_exit);

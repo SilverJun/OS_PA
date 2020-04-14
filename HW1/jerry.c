@@ -33,7 +33,7 @@ uid_t getUserIdByName(const char *name)
 }
 
 int main (int argc, char* argv[]) {
-    printf("argc: %d\n", argc);
+    //printf("argc: %d\n", argc);
     if (argc < 2 || parsing_message(argc, argv)) { usage(); exit(1); }
 
     // pass message to mousehole.c through proc filesystem.
@@ -46,20 +46,20 @@ int main (int argc, char* argv[]) {
 void usage() {
     printf("<usage>\n");
     // -bf uname fname
-    printf("\t-bf <uname> <fname>");
-    printf("\tthis command blocks file open by given user\n");
+    printf("\t-bf <uname> <fname>\n");
+    printf("\t\tthis command blocks file open by given user\n\n");
 
     // -uf
-    printf("\t-uf");
-    printf("\tundo blocking file open\n");
+    printf("\t-uf\n");
+    printf("\t\tundo blocking file open\n\n");
 
     // -pk
-    printf("\t-pk <uname>");
-    printf("\tthis command protects open by user name\n");
+    printf("\t-pk <uname>\n");
+    printf("\t\tthis command protects open by user name\n\n");
 
     // -uk
-    printf("\t-uk");
-    printf("\tundo protecting kill\n");
+    printf("\t-uk\n");
+    printf("\t\tundo protecting kill\n\n");
 }
 
 int parsing_message(int argc, char* argv[]) {
@@ -70,7 +70,7 @@ int parsing_message(int argc, char* argv[]) {
         "-uk",
     };
 
-    printf("%s\n", argv[1]);
+    //printf("%s\n", argv[1]);
     int i;
     for (i = 0; i < MSG_COUNT; ++i) {
         if (strcmp(argv[1], msg_table[i]) == 0) {
@@ -79,7 +79,7 @@ int parsing_message(int argc, char* argv[]) {
         }
     }
     if (i == MSG_COUNT) return 1;
-    printf("%d\n", msg.type);
+    //printf("%d\n", msg.type);
     
     switch (msg.type)
     {

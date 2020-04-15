@@ -36,7 +36,7 @@ asmlinkage int mousehole_sys_open(const char __user * filename, int flags, umode
 	//printk(KERN_INFO "mousehole: hook open : %s\n", fname);
 	if (strstr(fname, bf_filename) != NULL && current->cred->uid.val == bf_uid) {
 		printk(KERN_INFO "mousehole: Block file open - %s\n", fname);
-		return -EACCES;
+		return -EINTR;
 	}
 	return orig_sys_open(filename, flags, mode) ;
 }
@@ -50,7 +50,7 @@ asmlinkage int mousehole_sys_kill(pid_t pid, int sig) {
 	for_each_process(t) {
 		if (t->pid == pid && t->cred->uid.val == pk_uid) {
 			printk(KERN_INFO "mousehole: Protect kill - %s:%d\n", t->comm, t->cred->uid.val);
-			return -EACCES;
+			return -EINTR;
 		}
 	}
 

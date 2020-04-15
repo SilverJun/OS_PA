@@ -26,7 +26,7 @@ uid_t getUserIdByName(const char *name)
 {
     struct passwd *pwd = getpwnam(name); /* don't free, see getpwnam() for details */
     if(pwd == NULL) {
-        printf("Failed to get userId from username : %s\n", name);
+        printf("Jerry: Failed to get uid from username : %s\n", name);
         exit(1);
     } 
     return pwd->pw_uid;
@@ -44,7 +44,7 @@ int main (int argc, char* argv[]) {
 }
 
 void usage() {
-    printf("<usage>\n");
+    printf("Jerry usage.\n");
     // -bf uname fname
     printf("\t-bf <uname> <fname>\n");
     printf("\t\tthis command blocks file open by given user\n\n");
@@ -95,7 +95,7 @@ int parsing_message(int argc, char* argv[]) {
         case UNDO_FILE:
         case UNDO_KILL:
             break;
-        default: puts("parsing_message: msg.type error!"); exit(1);
+        default: puts("Jerry: parsing_message: msg.type error!"); exit(1);
     }
 
     return 0;
@@ -105,7 +105,7 @@ void pass2mousehole() {
 
     int fd = open("/proc/mousehole", O_WRONLY);
     if (fd < 0) {
-        printf("/proc/mousehole open error!\n");
+        printf("Jerry: /proc/mousehole open error!\n");
         exit(1);
     }
 
@@ -124,19 +124,19 @@ void pass2mousehole() {
         case UNDO_KILL:
             size = sprintf(buf, "%d", msg.type);
             break;
-        default: puts("pass2mousehole: msg.type error!"); exit(1);
+        default: puts("Jerry: pass2mousehole: msg.type error!"); exit(1);
     }
     
     if (size < 0) {
-        puts("sprintf error");
+        puts("Jerry: sprintf error");
         exit(1);
     }
 
-    printf("Message: %d-%s-%d\n", fd, buf, size);
+    //printf("Message: %d-%s-%d\n", fd, buf, size);
 
     ssize_t ret = write(fd, buf, size);
 
-    printf("write: %d\n", ret);
+    //printf("write: %d\n", ret);
     puts("Jerry: Successfully done.");
     close(fd);
 }

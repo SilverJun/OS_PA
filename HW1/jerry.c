@@ -22,6 +22,7 @@ JerryMsg msg;
 void usage();
 int parsing_message(int argc, char* argv[]);
 void pass2mousehole();
+void getMouseholeStatus();
 uid_t getUserIdByName(const char *name)
 {
     struct passwd *pwd = getpwnam(name); /* don't free, see getpwnam() for details */
@@ -37,7 +38,9 @@ int main (int argc, char* argv[]) {
     if (argc < 2 || parsing_message(argc, argv)) { usage(); exit(1); }
 
     // pass message to mousehole.c through proc filesystem.
-    pass2mousehole();
+
+    if (msg.type == STATUS) getMouseholeStatus();
+    else pass2mousehole();
 
     //exit with 0
     exit(0);
@@ -68,6 +71,7 @@ int parsing_message(int argc, char* argv[]) {
         "-pk",
         "-uf",
         "-uk",
+        "-status",
     };
 
     //printf("%s\n", argv[1]);
@@ -94,6 +98,7 @@ int parsing_message(int argc, char* argv[]) {
             break;
         case UNDO_FILE:
         case UNDO_KILL:
+        case STATUS:
             break;
         default: puts("Jerry: parsing_message: msg.type error!"); exit(1);
     }
@@ -138,5 +143,22 @@ void pass2mousehole() {
 
     //printf("write: %d\n", ret);
     puts("Jerry: Successfully done.");
+    close(fd);
+}
+
+void getMouseholeStatus() {
+    int fd = open("/proc/mousehole", O_RDONLY);
+    if (fd < 0) {
+        printf("Jerry: /proc/mousehole open error!\n");
+        exit(1);
+    }
+
+    char buf[MSG_SIZE] = {0x0};
+    int s = MSG_SIZE;
+
+    while ((s = read(fd, buf, MSG_SIZE)) > 0) {
+        buf[s+1] = 0;
+        printf("%s", buf);
+    }
     close(fd);
 }

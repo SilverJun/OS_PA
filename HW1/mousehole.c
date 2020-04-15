@@ -70,10 +70,25 @@ int mousehole_proc_release(struct inode *inode, struct file *file) {
 
 static
 ssize_t mousehole_proc_read(struct file *file, char __user *ubuf, size_t size, loff_t *offset) {
-	char buf[256] ;
+	char buf[MSG_SIZE] = {0};
+	char bf[128] = {0};
+	char pk[128] = {0};
 	ssize_t toread ;
+	
+	if (isEnableBlockFile) {
+		sprintf(bf, "Blocking file open: Enable(%s:%d)", bf_filename, bf_uid);
+	}
+	else {
+		sprintf(bf, "Blocking file open: Disable");
+	}
+	if (isEnableProtectKill) {
+		sprintf(pk, "Protect process kill: Enable(%d)", pk_uid);
+	}
+	else {
+		sprintf(pk, "Protect process kill: Disable");
+	}
 
-	sprintf(buf, "mousehole status\nBlock file open: %s", isEnableBlockFile==1?"Enable":"Disable") ;
+	sprintf(buf, "mousehole status\n%s\n%s\n", bf, pk) ;
 
 	if (strlen(buf) >= *offset + size) {
 		toread = size ;

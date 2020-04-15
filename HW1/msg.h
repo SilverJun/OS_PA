@@ -6,6 +6,7 @@ typedef enum {
     PREVENT_KILL,
     UNDO_FILE,
     UNDO_KILL,
+    STATUS,
     MSG_COUNT
 } msg_type;
 

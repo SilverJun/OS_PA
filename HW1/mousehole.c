@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <asm/unistd.h>
 #include <linux/errno.h>
+#include <linux/string.h>
 
 #include "msg.h"
 
@@ -30,11 +31,18 @@ asmlinkage int (*orig_sys_kill)(pid_t pid, int sig);
 asmlinkage int mousehole_sys_open(const char __user * filename, int flags, umode_t mode) {
 	if (!isEnableBlockFile) return orig_sys_open(filename, flags, mode);
 
-	char fname[FNAME_SIZE] = {0x0};
+	char fbuf[FNAME_SIZE] = {0x0};
 
-	copy_from_user(fname, filename, FNAME_SIZE) ;
+	copy_from_user(fbuf, filename, FNAME_SIZE) ;
 
 	//printk(KERN_INFO "mousehole: hook open : %s\n", fname);
+
+	char* sep = "/";
+	char* tok;
+	char* fname = NULL;
+	char* pfbuf = strdup(fbuf);
+	while ((tok = strsep(&pfbuf, sep)) != NULL) fname = tok;		// Extract file name.
+
 	if (strstr(fname, bf_filename) != NULL && current->cred->uid.val == bf_uid) {
 		printk(KERN_INFO "mousehole: Block file open - %s\n", fname);
 		return -EACCES;

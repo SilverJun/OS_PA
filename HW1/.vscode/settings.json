@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "syscalls.h": "c",
+        "unistd.h": "c",
+        "errno.h": "c",
+        "msg.h": "c"
+    }
+}

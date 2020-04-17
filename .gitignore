@@ -54,3 +54,4 @@ dkms.conf
 
 #Make file cache
 .cache.mk
+HW1/.DS_Store

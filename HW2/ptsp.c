@@ -5,81 +5,38 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <limits.h>
 #include <string.h>
 
 // pipe
 int pipes[2];
 
 // tsp
-int global_count = 0;
-int maximum_cases = 0;
-
 int** m;
 int* path;
+int* best_path;
+int* checked;
 int N = 0;
-int checked = 0;
+int dist = 0;
+int min_dist = INT_MAX;
+
+unsigned long long checked_count = 0;
 
 // parallel
-int process_count = 0;
+int process_count = 0; // maximum child process
 int current_active = 0;
-pid_t children[12];
-
-void sigchld_handler(int sig) // When the child process found the best route.
-{
-    // pid_t child;
-    // int exitcode;
-    // child = wait(&exitcode);
-
-    // printf("> child process %d is terminated with exitcode %d\n", child, WEXITSTATUS(exitcode));
-    int status;
-    pid_t pid;
-    while((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        printf("receive %d child\n", pid);
-        // something happened with child 'pid', do something about it...
-        // Details are in 'status', see waitpid() manpage
-    }
-
-    // pipe read.
-
-    // if check all possible cases, send term signal.
-}
-
-void child_main(int i) {
-    pid_t id = getpid();
-    printf("this child pid: %d, %dth child.\n", id, i);
-    while (1);
-    
-    exit(0);
-}
-
-void parent_sigint_handler(int sig) {
-    printf("parent sigint\n");
-}
-
-void child_sigint_handler(int sig) {
-    // send best route and length through pipe
-    printf("child sigint\n");
-    char buf[128] = {0};
-    sprintf(buf, "%d\n", getpid());
-    write(pipes[1], buf, strlen(buf));
-    exit(0);
-}
-
-pid_t spawn_child(int i) {
-    pid_t child;
-    if (child = fork()) {
-        return child;
-    }
-    else {
-        signal(SIGINT, child_sigint_handler);
-        child_main(i);
-    }
-}
+pid_t children[12] = {0};
 
 void init(char* filename) {
     FILE* fp = fopen(filename, "r");
     int temp = 0;
+    checked = (int*)malloc(sizeof(int)*N);
+    memset(checked, 0, sizeof(int)*N);
     path = (int*)malloc(sizeof(int)*N);
+    memset(path, 0, sizeof(int)*N);
+    best_path = (int*)malloc(sizeof(int)*N);
+    memset(best_path, 0, sizeof(int)*N);
+
     m = (int**)malloc(sizeof(int*)*N);
     for (int i = 0; i < N; i++) {
         m[i] = (int*)malloc(sizeof(int)*N);
@@ -92,34 +49,209 @@ void init(char* filename) {
 }
 
 void release() {
+    for (int i = 0; i < N; i++)
+    {
+        free(m[i]);
+    }
+    free(m);
+    free(best_path);
+    free(path);
+    free(checked);
+}
 
+
+void sigchld_handler(int sig) // When the child process found the best route.
+{
+    // pid_t child;
+    // int exitcode;
+    // child = wait(&exitcode);
+
+    // printf("> child process %d is terminated with exitcode %d\n", child, WEXITSTATUS(exitcode));
+    
+    // pipe read.
+
+    // if check all possible cases, send term signal.
+}
+
+void write_pipe() {
+    char buf[128] = {0};
+
+    if (min_dist != INT_MAX) {  // pipe: <count>,<dist>,<best route string>
+        char path_string[128] = {0};
+        // path string build
+        for (int i = 0; i < N; ++i)
+        {
+            char temp[8] = {0};
+            sprintf(temp, "%d ", best_path[i]);
+            strcat(path_string, temp);
+        }
+        strcat(path_string, "0");
+
+        sprintf(buf, "%llu,%d,%s\n", checked_count, dist, path_string);
+    }
+    else {  // child가 베스트 패스를 발견하기 전에 짤림.
+        sprintf(buf, "0,0,0\n");
+    }
+
+    write(pipes[1], buf, strlen(buf));
+    printf("child write pipe done\n");
+}
+
+void read_pipe() {
+    // pipe로 한줄 받기
+    char buf[128] = {0};
+    char* ptr = buf;
+
+    printf("try to read pipe line\n");
+    while (1)   // read one line from the pipe.
+    {
+        read(pipes[0], ptr, 1);
+        if (*ptr=='\n') { ptr++; break; }
+        ptr++;
+    }
+    printf("read_pipe: %s", buf);
+    
+    // parsing
+    ptr = strtok(buf, ",");
+
+    // count
+    unsigned long long local_count = 0;
+    sscanf(ptr, "%llu", &local_count);
+    ptr = strtok(NULL, ",");
+
+    if (local_count == 0) return;
+    checked_count += local_count;
+
+    // dist
+    int local_dist;
+    sscanf(ptr, "%d", &local_dist);
+    ptr = strtok(NULL, ",");
+
+    // update data if it needs.
+    if (local_dist < min_dist) {
+        min_dist = local_dist;
+        // path
+        for (int i = 0; i < N; ++i)
+        {
+            int len = sscanf(ptr, "%d ", &best_path[i]);
+            ptr+=len+1;
+        }
+    }
 }
 
 void print_result() {
     printf("The best route: <");
     for (int i = 0; i < N; i++)
     {
-        printf("%d ", path[i]);
+        printf("%d ", best_path[i]);
     }
+    printf("0>\n");
     
-    printf("%s %d");
+    printf("Distance is %d\n", min_dist);
+    printf("Total checked count is %llu\n", checked_count);
 }
 
-int length = 0;
+void parent_sigint_handler(int sig) {
+    printf("parent sigint start\n");
+    int status;
+    pid_t pid;
+    printf("active child: %d\n", current_active);
+    for (int i = current_active; i > 0; --i) {
+        //if (!children[i]) continue; // 빈칸이면 스킵.
+        while(1) {
+            if ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+            {
+                printf("receive %d child\n", pid);
+                
+                read_pipe();
 
-void visit(int i) {
-    if (i-12 < 0) {
-        if (fork()==0) {
-            visit(i-1);
-            exit(0);
+                current_active--;
+                break;  
+            }
         }
     }
+    printf("parent sigint end\n");
+
+    print_result();
+
+    release();
+    exit(0);
+}
+
+void child_sigint_handler(int sig) {
+    // send best route and length through pipe
+    printf("child sigint\n");
+
+    write_pipe();
     
+    exit(0);
+}
+
+
+// visit city
+void visit(int i) {
+    //printf("visit %d\n", i);
+    if (i == N) {
+        checked_count++;
+        dist += m[path[i-1]][0];
+
+        //printf("마지막 도착 dist: %d\n", dist);
+        // update if this result is shortest
+        if (dist < min_dist) {
+            min_dist = dist;
+            for (int k = 0; k < N; k++) {
+                best_path[k] = path[k];
+            }
+        }
+        //
+        dist -= m[path[i-1]][0];
+        return;
+    }
+    for (int j = 0; j < N; j++)
+    {
+        //printf("visit j: %d\n", j);
+        //printf("checked[j]: %d", checked[j]);
+        if (checked[j]) continue;
+        checked[j] = 1;
+        path[i] = j;
+        dist += m[path[i-1]][j];
+
+        if (N - 12 == i) { // check if need to spawn child.
+            //printf("need to spawn child\n");
+            while (current_active >= process_count) { usleep(10); };
+            
+            pid_t child;
+            //printf("fork!\n");
+            if (child = fork()) { // parent
+                for (int k = 0; k < process_count; k++) {  // add child pid to empty slot.
+                    if (!children[k]) {
+                        children[k] = child;
+                        break;
+                    }
+                }
+                current_active++;
+            }
+            else { // child case
+                checked_count = 0;
+                signal(SIGINT, child_sigint_handler);
+                visit(i+1);
+                printf("child done\n");
+                write_pipe();
+                exit(0);
+            }
+        }
+        else {
+            visit(i+1);
+        } // parent case before generating child.
+
+        checked[j] = 0;
+        dist -= m[path[i-1]][j];
+    }
 }
 
 int main(int argc, char* argv[])
 {
-    process_count = argv[2] - '0';
+    sscanf(argv[2], "%d", &process_count);
 	FILE* fp = fopen(argv[1], "r");
     //sscanf(argv[1], "gr%d.tsp", &len);
     
@@ -131,6 +263,7 @@ int main(int argc, char* argv[])
     }
     fclose(fp);
 
+    init(argv[1]);
 
     printf("parent pid: %d\n", getpid());
     signal(SIGCHLD, sigchld_handler);
@@ -141,10 +274,13 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    for (int i = 0; i < 10; ++i) {
-        spawn_child(i);
-    }
-    
+    // go!
+    path[0] = 0;
+    checked[0] = 1;
+    visit(1);
+    checked[0] = 0;
+
+    printf("all job is done. wait for end of children.\n");
     while (1) sleep(1); // wait until finished.
 
     return 0;

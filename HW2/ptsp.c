@@ -26,6 +26,7 @@ unsigned long long checked_count = 0;
 int process_count = 0; // maximum child process
 int current_active = 0;
 pid_t children[12] = {0};
+int is_term = 0;
 
 void init(char* filename) {
     FILE* fp = fopen(filename, "r");
@@ -59,20 +60,6 @@ void release() {
     free(checked);
 }
 
-
-void sigchld_handler(int sig) // When the child process found the best route.
-{
-    // pid_t child;
-    // int exitcode;
-    // child = wait(&exitcode);
-
-    // printf("> child process %d is terminated with exitcode %d\n", child, WEXITSTATUS(exitcode));
-    
-    // pipe read.
-
-    // if check all possible cases, send term signal.
-}
-
 void write_pipe() {
     char buf[128] = {0};
 
@@ -87,7 +74,7 @@ void write_pipe() {
         }
         strcat(path_string, "0");
 
-        sprintf(buf, "%llu,%d,%s\n", checked_count, dist, path_string);
+        sprintf(buf, "%llu,%d,%s\n", checked_count, min_dist, path_string);
     }
     else {  // child가 베스트 패스를 발견하기 전에 짤림.
         sprintf(buf, "0,0,0\n");
@@ -151,12 +138,40 @@ void print_result() {
     printf("Total checked count is %llu\n", checked_count);
 }
 
+void sigchld_handler(int sig) // When the child process found the best route.
+{
+    pid_t pid;
+    int status;
+
+    //if (!children[i]) continue; // 빈칸이면 스킵.
+    while(!is_term) {
+        if ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+        {
+            printf("receive %d child\n", pid);
+
+            for (int i = 0; i < process_count; i++)
+            {
+                if (children[i] == pid) {
+                    children[i] = 0;
+                    break;
+                }
+            }
+            
+            read_pipe();
+
+            current_active--;
+            break;  
+        }
+    }
+}
+
 void parent_sigint_handler(int sig) {
     printf("parent sigint start\n");
+    is_term = 1;
     int status;
     pid_t pid;
     printf("active child: %d\n", current_active);
-    for (int i = current_active; i > 0; --i) {
+    while(current_active != 0) {
         //if (!children[i]) continue; // 빈칸이면 스킵.
         while(1) {
             if ((pid = waitpid(-1, &status, WNOHANG)) > 0)
@@ -229,6 +244,7 @@ void visit(int i) {
                         break;
                     }
                 }
+                printf("child forked!\n");
                 current_active++;
             }
             else { // child case
@@ -254,6 +270,11 @@ int main(int argc, char* argv[])
     sscanf(argv[2], "%d", &process_count);
 	FILE* fp = fopen(argv[1], "r");
     //sscanf(argv[1], "gr%d.tsp", &len);
+
+    if (!fp) {
+        printf("file open error\n");
+        exit(1);
+    }
     
     while (!feof(fp)) // check len
     {
@@ -281,7 +302,9 @@ int main(int argc, char* argv[])
     checked[0] = 0;
 
     printf("all job is done. wait for end of children.\n");
-    while (1) sleep(1); // wait until finished.
+    while (current_active != 0) usleep(100); // wait until finish all child processes.
+
+    print_result();
 
     return 0;
 }

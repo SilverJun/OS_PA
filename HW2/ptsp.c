@@ -28,7 +28,7 @@ int current_active = 0;
 pid_t children[12] = {0};
 int is_term = 0;
 
-void init(char* filename) {
+void init(char* filename) { // memory allocation and initialization value.
     FILE* fp = fopen(filename, "r");
     int temp = 0;
     checked = (int*)malloc(sizeof(int)*N);
@@ -50,8 +50,7 @@ void init(char* filename) {
 }
 
 void release() {
-    for (int i = 0; i < N; i++)
-    {
+    for (int i = 0; i < N; i++) {
         free(m[i]);
     }
     free(m);
@@ -63,11 +62,10 @@ void release() {
 void write_pipe() {
     char buf[128] = {0};
 
-    if (min_dist != INT_MAX) {  // pipe: <count>,<dist>,<best route string>
+    if (min_dist != INT_MAX) {  // pipe: <count>,<dist>,<best path>
         char path_string[128] = {0};
         // path string build
-        for (int i = 0; i < N; ++i)
-        {
+        for (int i = 0; i < N; ++i) {
             char temp[8] = {0};
             sprintf(temp, "%d ", best_path[i]);
             strcat(path_string, temp);
@@ -76,27 +74,24 @@ void write_pipe() {
 
         sprintf(buf, "%llu,%d,%s\n", checked_count, min_dist, path_string);
     }
-    else {  // child가 베스트 패스를 발견하기 전에 짤림.
+    else {  // case of visit 0 path.
         sprintf(buf, "0,0,0\n");
     }
 
     write(pipes[1], buf, strlen(buf));
-    printf("child write pipe done\n");
+    // printf("child write pipe done\n");
 }
 
 void read_pipe() {
-    // pipe로 한줄 받기
     char buf[128] = {0};
     char* ptr = buf;
 
-    printf("try to read pipe line\n");
-    while (1)   // read one line from the pipe.
-    {
+    // printf("try to read pipe line\n");
+    while (1) {   // read one line from the pipe. 
         read(pipes[0], ptr, 1);
-        if (*ptr=='\n') { ptr++; break; }
-        ptr++;
+        if (*ptr++=='\n') { ptr++; break; }
     }
-    printf("read_pipe: %s", buf);
+    // printf("read_pipe: %s", buf);
     
     // parsing
     ptr = strtok(buf, ",");
@@ -106,7 +101,7 @@ void read_pipe() {
     sscanf(ptr, "%llu", &local_count);
     ptr = strtok(NULL, ",");
 
-    if (local_count == 0) return;
+    if (local_count == 0) return; // if child can't visit any path, then local_count is 0. so I can just skip this result. 
     checked_count += local_count;
 
     // dist
@@ -118,39 +113,33 @@ void read_pipe() {
     if (local_dist < min_dist) {
         min_dist = local_dist;
         // path
-        for (int i = 0; i < N; ++i)
-        {
+        for (int i = 0; i < N; ++i) {
             int len = sscanf(ptr, "%d ", &best_path[i]);
-            ptr+=len+1;
+            ptr+=len+1; // 1 for whitespace
         }
     }
 }
 
 void print_result() {
     printf("The best route: <");
-    for (int i = 0; i < N; i++)
-    {
+    for (int i = 0; i < N; i++) {
         printf("%d ", best_path[i]);
     }
     printf("0>\n");
     
-    printf("Distance is %d\n", min_dist);
+    printf("The best minimum distance is %d\n", min_dist);
     printf("Total checked count is %llu\n", checked_count);
 }
 
-void sigchld_handler(int sig) // When the child process found the best route.
-{
+void sigchld_handler(int sig) { // When the child process found the best route.
     pid_t pid;
     int status;
 
-    //if (!children[i]) continue; // 빈칸이면 스킵.
     while(!is_term) {
-        if ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-        {
+        if ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
             printf("receive %d child\n", pid);
 
-            for (int i = 0; i < process_count; i++)
-            {
+            for (int i = 0; i < process_count; i++) {
                 if (children[i] == pid) {
                     children[i] = 0;
                     break;
@@ -166,26 +155,22 @@ void sigchld_handler(int sig) // When the child process found the best route.
 }
 
 void parent_sigint_handler(int sig) {
-    printf("parent sigint start\n");
+    // printf("parent sigint start\n");
     is_term = 1;
     int status;
     pid_t pid;
-    printf("active child: %d\n", current_active);
+    // printf("active child: %d\n", current_active);
     while(current_active != 0) {
-        //if (!children[i]) continue; // 빈칸이면 스킵.
         while(1) {
-            if ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-            {
-                printf("receive %d child\n", pid);
-                
+            if ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+                // printf("receive %d child\n", pid);
                 read_pipe();
-
                 current_active--;
                 break;  
             }
         }
     }
-    printf("parent sigint end\n");
+    // printf("parent sigint end\n");
 
     print_result();
 
@@ -194,8 +179,8 @@ void parent_sigint_handler(int sig) {
 }
 
 void child_sigint_handler(int sig) {
-    // send best route and length through pipe
-    printf("child sigint\n");
+    // send result through pipe
+    // printf("child sigint\n");
 
     write_pipe();
     
@@ -222,8 +207,7 @@ void visit(int i) {
         dist -= m[path[i-1]][0];
         return;
     }
-    for (int j = 0; j < N; j++)
-    {
+    for (int j = 0; j < N; j++) {
         //printf("visit j: %d\n", j);
         //printf("checked[j]: %d", checked[j]);
         if (checked[j]) continue;
@@ -244,14 +228,14 @@ void visit(int i) {
                         break;
                     }
                 }
-                printf("child forked!\n");
+                // printf("child forked!\n");
                 current_active++;
             }
             else { // child case
                 checked_count = 0;
-                signal(SIGINT, child_sigint_handler);
+                signal(SIGINT, child_sigint_handler); // change sigint to child_sigint_handler to write pipe.
                 visit(i+1);
-                printf("child done\n");
+                // printf("child done\n");
                 write_pipe();
                 exit(0);
             }
@@ -265,8 +249,7 @@ void visit(int i) {
     }
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     sscanf(argv[2], "%d", &process_count);
 	FILE* fp = fopen(argv[1], "r");
     //sscanf(argv[1], "gr%d.tsp", &len);
@@ -276,8 +259,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
     
-    while (!feof(fp)) // check len
-    {
+    while (!feof(fp)) { // check len
         char buf[256]={0};
         fgets(buf, 256, fp);
         if (strlen(buf)) N++;

@@ -77,7 +77,7 @@ void write_pipe() {
     else {  // case of visit 0 path.
         sprintf(buf, "0,0,0\n");
     }
-
+    //printf("write_pipe: %s", buf);
     write(pipes[1], buf, strlen(buf));
     // printf("child write pipe done\n");
 }
@@ -91,7 +91,7 @@ void read_pipe() {
         read(pipes[0], ptr, 1);
         if (*ptr++=='\n') { ptr++; break; }
     }
-    // printf("read_pipe: %s", buf);
+    //printf("read_pipe: %s", buf);
     
     // parsing
     ptr = strtok(buf, ",");
@@ -113,9 +113,11 @@ void read_pipe() {
     if (local_dist < min_dist) {
         min_dist = local_dist;
         // path
+        char* path_ptr = ptr;
+        ptr = strtok(path_ptr, " ");
         for (int i = 0; i < N; ++i) {
-            int len = sscanf(ptr, "%d ", &best_path[i]);
-            ptr+=len+1; // 1 for whitespace
+            sscanf(ptr, "%d", &best_path[i]);
+            ptr = strtok(NULL, " ");
         }
     }
 }
@@ -137,7 +139,7 @@ void sigchld_handler(int sig) { // When the child process found the best route.
 
     while(!is_term) {
         if ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-            printf("receive %d child\n", pid);
+            //printf("receive %d child\n", pid);
 
             for (int i = 0; i < process_count; i++) {
                 if (children[i] == pid) {
@@ -195,6 +197,26 @@ void visit(int i) {
         checked_count++;
         dist += m[path[i-1]][0];
 
+        // int boolean = 1;
+        // int result[] = {0, 1, 2, 3, 6, 7, 12, 16, 6, 5, 13, 14, 4, 9, 10, 4, 8, 0};
+        
+        // for (int k = 0; k < N; k++)
+        // {
+        //     if (result[k] != path[k]) {
+        //         boolean = 0;
+        //         break;
+        //     }
+        //     //printf("%d, ", checked[k]);
+        // }
+
+        // if (boolean) {
+        //     for (int k = 0; k < N; k++)
+        //     {
+        //         printf("%d, ", checked[k]);
+        //     }
+        //     printf("\n");
+        // }
+
         //printf("마지막 도착 dist: %d\n", dist);
         // update if this result is shortest
         if (dist < min_dist) {
@@ -210,12 +232,13 @@ void visit(int i) {
     for (int j = 0; j < N; j++) {
         //printf("visit j: %d\n", j);
         //printf("checked[j]: %d", checked[j]);
-        if (checked[j]) continue;
+        if (checked[j]==1) continue;
         checked[j] = 1;
         path[i] = j;
+
         dist += m[path[i-1]][j];
 
-        if (N - 12 == i) { // check if need to spawn child.
+        if (N - 12 == i+1) { // check if need to spawn child.
             //printf("need to spawn child\n");
             while (current_active >= process_count) { usleep(10); };
             

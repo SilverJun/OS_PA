@@ -196,28 +196,7 @@ void visit(int i) {
     if (i == N) {
         checked_count++;
         dist += m[path[i-1]][0];
-
-        // int boolean = 1;
-        // int result[] = {0, 1, 2, 3, 6, 7, 12, 16, 6, 5, 13, 14, 4, 9, 10, 4, 8, 0};
         
-        // for (int k = 0; k < N; k++)
-        // {
-        //     if (result[k] != path[k]) {
-        //         boolean = 0;
-        //         break;
-        //     }
-        //     //printf("%d, ", checked[k]);
-        // }
-
-        // if (boolean) {
-        //     for (int k = 0; k < N; k++)
-        //     {
-        //         printf("%d, ", checked[k]);
-        //     }
-        //     printf("\n");
-        // }
-
-        //printf("마지막 도착 dist: %d\n", dist);
         // update if this result is shortest
         if (dist < min_dist) {
             min_dist = dist;
@@ -275,7 +254,7 @@ void visit(int i) {
 int main(int argc, char* argv[]) {
     sscanf(argv[2], "%d", &process_count);
 	FILE* fp = fopen(argv[1], "r");
-    //sscanf(argv[1], "gr%d.tsp", &len);
+    //sscanf(argv[1], "gr%d.tsp", &len); // this is some trick
 
     if (!fp) {
         printf("file open error\n");

@@ -239,6 +239,7 @@ void visit(int i) {
                 visit(i+1);
                 // printf("child done\n");
                 write_pipe();
+                release();
                 exit(0);
             }
         }

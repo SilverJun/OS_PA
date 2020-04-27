@@ -77,7 +77,10 @@ void write_pipe() {
     else {  // case of visit 0 path.
         sprintf(buf, "0,0,0\n");
     }
-    //printf("write_pipe: %s", buf);
+    
+    #ifdef DEBUG
+    printf("write_pipe: %s", buf);
+    #endif
     write(pipes[1], buf, strlen(buf));
     // printf("child write pipe done\n");
 }
@@ -91,8 +94,11 @@ void read_pipe() {
         read(pipes[0], ptr, 1);
         if (*ptr++=='\n') { ptr++; break; }
     }
-    //printf("read_pipe: %s", buf);
     
+    #ifdef DEBUG
+    printf("read_pipe: %s", buf);
+    #endif 
+
     // parsing
     ptr = strtok(buf, ",");
 
@@ -123,7 +129,7 @@ void read_pipe() {
 }
 
 void print_result() {
-    printf("The best route: <");
+    printf("\nThe best route: <");
     for (int i = 0; i < N; i++) {
         printf("%d ", best_path[i]);
     }
@@ -189,9 +195,8 @@ void child_sigint_handler(int sig) {
     exit(0);
 }
 
-
 // visit city
-void visit(int i) {
+void ptsp(int i) {
     //printf("visit %d\n", i);
     if (i == N) {
         checked_count++;
@@ -236,7 +241,8 @@ void visit(int i) {
             else { // child case
                 checked_count = 0;
                 signal(SIGINT, child_sigint_handler); // change sigint to child_sigint_handler to write pipe.
-                visit(i+1);
+                close(pipes[0]);
+                ptsp(i+1);
                 // printf("child done\n");
                 write_pipe();
                 release();
@@ -244,7 +250,7 @@ void visit(int i) {
             }
         }
         else {
-            visit(i+1);
+            ptsp(i+1);
         } // parent case before generating child.
 
         checked[j] = 0;
@@ -283,7 +289,7 @@ int main(int argc, char* argv[]) {
     // go!
     path[0] = 0;
     checked[0] = 1;
-    visit(1);
+    ptsp(1);
     checked[0] = 0;
 
     printf("all job is done. wait for end of children.\n");

@@ -117,6 +117,7 @@ int main()
 {
     printf("parent pid: %d\n", getpid());
     //signal(SIGCHLD, sigchld_handler);
+    signal(SIGTERM, parent_sigint_handler);
     signal(SIGINT, parent_sigint_handler);
     process_count = 10;
     if (pipe(pipes) != 0) {

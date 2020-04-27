@@ -164,6 +164,13 @@ void sigchld_handler(int sig) { // When the child process found the best route.
 
 void parent_sigint_handler(int sig) {
     // printf("parent sigint start\n");
+
+    if (sig == SIGTERM) { // SIGTERM doesn't propagate to child processes. So I need to propagate sigint to all current running children.
+        for (int i = 0; i < process_count; i++)
+            if (children[i])
+                kill(children[i], SIGINT);
+    }
+
     is_term = 1;
     int status;
     pid_t pid;
@@ -279,6 +286,7 @@ int main(int argc, char* argv[]) {
 
     printf("parent pid: %d\n", getpid());
     signal(SIGCHLD, sigchld_handler);
+    signal(SIGTERM, parent_sigint_handler);
     signal(SIGINT, parent_sigint_handler);
 
     if (pipe(pipes) != 0) {

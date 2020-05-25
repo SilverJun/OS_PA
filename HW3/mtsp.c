@@ -160,6 +160,9 @@ void tsp(task_t* task, int i) {
         pthread_mutex_unlock(&min_path_update);
         //
         task->dist -= m[task->path[i-1]][0];
+
+        pthread_testcancel(); // check cencel.
+
         return;
     }
     for (int j = 0; j < N; j++) {
@@ -201,6 +204,34 @@ void print_result() {
     pthread_mutex_unlock(&min_path_update);
 }
 
+
+void cleenup(void* param) {
+    printf("consumer cleenup\n");
+    // 여기에서 하던 테스크를 처음 상태로 되돌려서 바운드 버퍼에 다시 올린다.
+
+    task_t* t = (task_t*)param;
+
+    // 롤백 과정
+    for (int i = N-11; i < N; ++i)
+    {
+        t->path[i] = 0;
+    }
+    memset(t->checked, 0, N*sizeof(int));
+
+    int orig_dist = 0;
+    t->checked[0] = 1;
+    for (int i = 1; i < N-11; i++)
+    {
+        orig_dist += m[t->path[i-1]][t->path[i]];
+        t->checked[t->path[i]] = 1;
+    }
+    t->dist = orig_dist;
+    t->owner = NULL;
+    
+    bounded_buffer_queue(task_queue, t);
+    printf("cleenup task queue done\n");
+}
+
 void* Producer(void* param) {
     task_t* t = create_task();
     // go!
@@ -221,18 +252,22 @@ void* Consumer(void* param) {
     data->checked_count = 0;
 
     printf("Consumer[%ld]> start consumer\n", data->tid);
-    while (1) { // 모든 작업이 끝날 때 까지.
+    while (1) { // TODO : 모든 작업이 끝날 때 까지.
         // bounded buffer dequeue.
         task_t* t = bounded_buffer_dequeue(task_queue);
+        pthread_cleanup_push(cleenup, t);
         printf("Consumer[%ld]> now got one task!\n", data->tid);
         t->owner = data;
         tsp(t, N - 11); // 11! 이 되는 지점부터.
+        pthread_cleanup_pop(1);
         printf("Consumer[%ld]> done task!\n", data->tid);
         task_release(t);
 
         pthread_mutex_lock(&data->lock);
         data->subtask_count++;
         pthread_mutex_unlock(&data->lock);
+
+        pthread_testcancel();
     }
 }
 
@@ -289,35 +324,31 @@ int main(int argc, char* argv[]) {
     printf("main> creating producer thread\n");
     // spawn producer
     pthread_create(&producer_tid, 0x0, Producer, 0x0);
-    //pthread_detach(producer_tid);
+    pthread_detach(producer_tid);
 
     printf("main> creating consumer thread\n");
     // spawn consumer
     for (int i = 0; i < thread_count; i++)
     {
         pthread_create(&consumer_arr[i].tid, 0x0, Consumer, (void*)&consumer_arr[i]);
-        //pthread_detach(consumer_arr[i].tid);
+        pthread_detach(consumer_arr[i].tid);
     }
 
-    pthread_join(producer_tid, 0x0);
-    for (int i = 0; i < thread_count; i++)
-    {
-        pthread_join(consumer_arr[i].tid, 0x0);
-    }
-    
-    // while end
-    // cui 처리.
-
-    // while (1) // TODO : 종료조건(프로듀서에서 모든 테스크를 큐에 넣음 + 큐가 empty가 됨)
+    // pthread_join(producer_tid, 0x0);
+    // for (int i = 0; i < thread_count; i++)
     // {
-    //     char cmd[128] = {0};
-    //     printf("> ");
-    //     scanf("%s", cmd);
-
-    //     // parse command
-        
-
+    //     pthread_join(consumer_arr[i].tid, 0x0);
     // }
+
+    while (1) // TODO : 종료조건(프로듀서에서 모든 테스크를 큐에 넣음 + 큐가 empty가 됨)
+    {
+        char cmd[128] = {0};
+        printf("> ");
+        scanf("%s", cmd);
+
+        // parse command
+        // strtok을 사용해 공백 단위로 파싱, 첫번째 문자열로 커멘드 분류.
+    }
     
 
     return 0;

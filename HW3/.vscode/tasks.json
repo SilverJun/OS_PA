@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"echoCommand": true,
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "gcc build active file",
+			"command": "gcc",
+			"args": [
+				"-g",
+				"mtsp.c",
+				"-pthread",
+				"-o",
+				"mtsp"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		}
+	]
+}

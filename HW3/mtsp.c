@@ -360,7 +360,7 @@ int main(int argc, char* argv[]) {
         // parse command
         // strtok을 사용해 공백 단위로 파싱, 첫번째 문자열로 커멘드 분류.
         ptr = strtok(cmd, " ");
-        printf("first command %s\n", ptr);
+        //printf("first command %s\n", ptr);
 
         // stat : print_result
         if (strcmp(ptr, "stat") == 0) {
@@ -380,7 +380,7 @@ int main(int argc, char* argv[]) {
         }
         else if (strcmp(ptr, "num") == 0) {
             ptr = strtok(NULL, " ");
-            printf("%s\n", ptr);
+            //printf("%s\n", ptr);
 
             int value = atoi(ptr);
 

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <pthread.h>
@@ -175,12 +176,12 @@ void tsp(task_t* task, int i) {
         task->dist += m[task->path[i-1]][j];
 
         if (N - 11 == i+1) { // here to add to bounded buffer
-            printf("Producer> try to enqueue\n");
+            //printf("Producer> try to enqueue\n");
             task_t* copy = create_task();
             task_copy(copy, task);
 
             bounded_buffer_queue(task_queue, copy);
-            printf("Producer> enqueue done\n");
+            //printf("Producer> enqueue done\n");
         }
         else {
             tsp(task, i+1);
@@ -205,8 +206,8 @@ void print_result() {
 }
 
 
-void cleenup(void* param) {
-    printf("consumer cleenup\n");
+void cleanup(void* param) {
+    //printf("consumer cleenup\n");
     // 여기에서 하던 테스크를 처음 상태로 되돌려서 바운드 버퍼에 다시 올린다.
 
     task_t* t = (task_t*)param;
@@ -229,7 +230,7 @@ void cleenup(void* param) {
     t->owner = NULL;
     
     bounded_buffer_queue(task_queue, t);
-    printf("cleenup task queue done\n");
+    //printf("cleenup task queue done\n");
 }
 
 void* Producer(void* param) {
@@ -240,7 +241,7 @@ void* Producer(void* param) {
     tsp(t, 1);
     t->checked[0] = 0;
 
-    printf("Producer> all tasks are spawned\n");
+    //printf("Producer> all tasks are spawned\n");
     // while (active != 0) usleep(100); // wait until finish all child processes.
 }
 
@@ -251,16 +252,16 @@ void* Consumer(void* param) {
     data->subtask_count = 0;
     data->checked_count = 0;
 
-    printf("Consumer[%ld]> start consumer\n", data->tid);
+    //printf("Consumer[%ld]> start consumer\n", data->tid);
     while (1) { // TODO : 모든 작업이 끝날 때 까지.
         // bounded buffer dequeue.
         task_t* t = bounded_buffer_dequeue(task_queue);
-        pthread_cleanup_push(cleenup, t);
-        printf("Consumer[%ld]> now got one task!\n", data->tid);
+        pthread_cleanup_push(cleanup, t);
+        //printf("Consumer[%ld]> now got one task!\n", data->tid);
         t->owner = data;
         tsp(t, N - 11); // 11! 이 되는 지점부터.
-        pthread_cleanup_pop(1);
-        printf("Consumer[%ld]> done task!\n", data->tid);
+        pthread_cleanup_pop(0);
+        //printf("Consumer[%ld]> done task!\n", data->tid);
         task_release(t);
 
         pthread_mutex_lock(&data->lock);
@@ -302,6 +303,11 @@ void release() {
     free(min_path);
 }
 
+void sigint_handler(int sig) {
+    print_result();
+    exit(0);
+}
+
 int main(int argc, char* argv[]) {
     sscanf(argv[2], "%d", &thread_count);
 	FILE* fp = fopen(argv[1], "r");
@@ -321,12 +327,14 @@ int main(int argc, char* argv[]) {
 
     init(argv[1]);
 
-    printf("main> creating producer thread\n");
+    signal(SIGINT, sigint_handler);
+
+    //printf("main> creating producer thread\n");
     // spawn producer
     pthread_create(&producer_tid, 0x0, Producer, 0x0);
     pthread_detach(producer_tid);
 
-    printf("main> creating consumer thread\n");
+    //printf("main> creating consumer thread\n");
     // spawn consumer
     for (int i = 0; i < thread_count; i++)
     {
@@ -343,11 +351,60 @@ int main(int argc, char* argv[]) {
     while (1) // TODO : 종료조건(프로듀서에서 모든 테스크를 큐에 넣음 + 큐가 empty가 됨)
     {
         char cmd[128] = {0};
+        char* ptr = NULL;
         printf("> ");
-        scanf("%s", cmd);
+        fgets(cmd, 128, stdin);
+        if (strlen(cmd)==0) continue;
 
+        cmd[strlen(cmd)-1] = '\0'; // remove \n character.
         // parse command
         // strtok을 사용해 공백 단위로 파싱, 첫번째 문자열로 커멘드 분류.
+        ptr = strtok(cmd, " ");
+        printf("first command %s\n", ptr);
+
+        // stat : print_result
+        if (strcmp(ptr, "stat") == 0) {
+            print_result();
+        }
+        else if (strcmp(ptr, "threads") == 0) {
+            printf("=== Consumer threads info ===\n");
+            for (int i = 0; i < thread_count; i++)
+            {
+                printf("consumer %d,\n", i+1);
+                pthread_mutex_lock(&consumer_arr[i].lock);
+                printf("thread id: %lu\n", consumer_arr[i].tid);
+                printf("processed subtasks: %u\n", consumer_arr[i].subtask_count);
+                printf("current checked routes: %lld\n\n", consumer_arr[i].checked_count);
+                pthread_mutex_unlock(&consumer_arr[i].lock);
+            }
+        }
+        else if (strcmp(ptr, "num") == 0) {
+            ptr = strtok(NULL, " ");
+            printf("%s\n", ptr);
+
+            int value = atoi(ptr);
+
+            if (value < 1 || value > 8) continue;
+            
+            if (value > thread_count) { // create more threads
+                for (int i = thread_count; i < value; i++)
+                {
+                    pthread_create(&consumer_arr[i].tid, 0x0, Consumer, (void*)&consumer_arr[i]);
+                    pthread_detach(consumer_arr[i].tid);
+                }
+            }
+            else { // cancel threads
+                for (int i = value; i < thread_count; i++)
+                {
+                    pthread_cancel(consumer_arr[i].tid);
+                }
+            }
+            thread_count = value;
+            printf("Successfully done.\n");
+        }
+        else {
+            printf("Undefined commands.\n");
+        }
     }
     
 

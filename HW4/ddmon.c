@@ -117,6 +117,7 @@ int pthread_mutex_unlock(pthread_mutex_t* mutex) {
 
         // pipe write
         char buf[128] = {0x0};
+        sprintf(buf, "unlock %lu %p\n", pthread_self(), mutex);
         //printf("ddmon> command: %s\n", buf);
         pipe_write(buf, strlen(buf));
 

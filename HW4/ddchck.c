@@ -11,7 +11,6 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <signal.h>
 
 #define N 10
 
@@ -190,14 +189,14 @@ int main(int argc, char* argv[]) {
         sscanf(buf[1], "%s [%x]", tmp, &addr_int); // extract stack info.
         //printf("%x\n", addr_int);
         sprintf(address, "0x%x", addr_int);
-        printf("%s, %s\n", name, address);
+        //printf("%s, %s\n", name, address);
 
         int t_idx = find_thread_idx(tid);
 
         if (t_idx == -1) { // make new thread
-            printf("ddchck> new thread\n");
             t_idx = t_size++;
             t_table[t_idx] = tid;
+            printf("ddchck> new thread, current threads: %d\n", t_size);
         }
         printf("ddchck> t_idx: %d\n", t_idx);
         // do that command
@@ -205,6 +204,7 @@ int main(int argc, char* argv[]) {
             printf("ddchck> lock\n");
 
             int l_idx = find_mutex_idx(addr);
+            printf("ddchck> l_idx: %d\n", l_idx);
             if (l_idx == -1) {
                 l_idx = push_mutex(addr);
             }

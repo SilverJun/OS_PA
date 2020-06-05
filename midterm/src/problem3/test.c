@@ -24,6 +24,7 @@ mysem_t sem;
 void* test(void* ptr) {
     printf("thread sem wait!\n");
     mysem_wait(&sem);
+    sleep(1);
     printf("thread sem wait done!\n");
     mysem_post(&sem);
 }

@@ -34,10 +34,11 @@ mysem_wait (mysem_t * sem)
 {
 	//TODO
 	pthread_mutex_lock(&sem->lock);
-	sem->curr_count++;
-	while (sem->max_count < sem->curr_count)
+
+	while (sem->curr_count >= sem->max_count)
 	{
 		pthread_cond_wait(&sem->post, &sem->lock);
 	}
+	sem->curr_count++;
 	pthread_mutex_unlock(&sem->lock);
 }

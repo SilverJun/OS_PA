@@ -32,7 +32,7 @@ main(int argc, char *argv[])
 
 	pthread_create(&tid, NULL, thread, NULL);
 	
-	//sleep(1);
+	sleep(1);
 	pthread_mutex_lock(&mutex2); noise() ; 
 	pthread_mutex_lock(&mutex);	noise() ; 
 	pthread_mutex_unlock(&mutex); noise() ;

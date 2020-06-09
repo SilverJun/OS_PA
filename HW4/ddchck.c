@@ -26,11 +26,12 @@ history_t t_history[N];
 
 
 int lock_graph[N][N];
-int lock_graph_node_size = 0;
 
 // for addr2line
 char name[64] = {0x0};
 char address[64] = {0x0};
+
+int fd = 0;
 
 void print_line_no() {
     char str[128] = {0x0};
@@ -38,14 +39,14 @@ void print_line_no() {
     strcat(str, name);
     str[strlen(str)] = ' ';
     strcat(str, address);
-    printf("cmd: %s\n", str);
+    //printf("cmd: %s\n", str);
     FILE* fp = popen(str, "r");
     if (fp == NULL) {
         printf("ddchck> addr2line open failed!\n");
         return;
     }
     fscanf(fp, "%s", str);
-    printf("ddchck> %s\n", str);
+    printf("%s\n", str);
     fclose(fp);
 }
 
@@ -83,25 +84,34 @@ void lock(int t_idx, int l_idx) {
     history_t* this_thread = &t_history[t_idx];
 
     this_thread->buf[this_thread->top_idx++] = l_idx;
-
+    printf("ddchck> top_idx: %d\n", this_thread->top_idx);
+    //print_line_no();
     if (this_thread->top_idx > 1) {
-        printf("link edge!\n");
         lock_graph[this_thread->buf[this_thread->top_idx-2]][l_idx] = 1; // edge 추가.
-
+        printf("ddchck> edge (%d, %d) added\n", this_thread->buf[this_thread->top_idx-2], l_idx);
         int visited[N];
         int recur[N];
         memset(visited, 0, sizeof(int)*N);
         memset(recur, 0, sizeof(int)*N);
         if (find_cycle(l_idx, visited, recur)) { // cycle 찾기.
-            printf("ddchck> Deadlock detected at:\n");
+            printf("ddchck> Deadlock detected at:");
             print_line_no();
+            
+            // print cycle path
+            printf("<");
+            for (int i = 0; i < N; i++)
+            {
+                if (recur[i])
+                    printf("%d, ", i);
+            }
+            printf("> cycle\n");
             //abort();
         }
     }
 }
 
 void unlock(int t_idx, int l_idx) {
-    printf("delete node!\n");
+    printf("ddchck> delete node!\n");
     for (int x = 0; x < N; x++) { // remove all edge which connected with popped mutex.
         lock_graph[l_idx][x] = 0;
         lock_graph[x][l_idx] = 0;
@@ -109,11 +119,15 @@ void unlock(int t_idx, int l_idx) {
     // pop thread history
 
     history_t* this_thread = &t_history[t_idx];
+
+    // 찾아서 있으면 top_idx 줄이자.
+
+    if (this_thread->top_idx != 0)
+        this_thread->buf[this_thread->top_idx--] = 0;
 }
 
 int push_mutex(int addr) {  
-    printf("ddchck> create node!\n");  
-    lock_graph_node_size++;
+    printf("ddchck> create node!\n");
     for (int i = 0; i < N; i++) {
         if (mutex_addr[i] == 0) {
             mutex_addr[i] = addr;
@@ -124,16 +138,14 @@ int push_mutex(int addr) {
 }
 
 void pop_mutex(int t_idx, int addr) {
-    lock_graph_node_size--;
     int l_idx = find_mutex_idx(addr);
-
+    if (l_idx==-1) return;
     mutex_addr[l_idx] = 0;
     unlock(t_idx, l_idx);
 }
 
 void pipe_read(char* buf, int size) {
     //printf("ddchck> try to read fifo\n");
-    int fd = open("./.ddtrace", O_RDONLY | O_SYNC);
     char* ptr = buf;
 
     while (1) {   // read one line from the pipe. 
@@ -141,7 +153,6 @@ void pipe_read(char* buf, int size) {
         if (*ptr=='\0' || *ptr=='\n') { break; }
         ptr++;
     }
-    close(fd);
 }
 
 void init() {
@@ -155,6 +166,8 @@ void init() {
 
     memset(t_table, 0, sizeof(pthread_t) * N);
     memset(mutex_addr, 0, sizeof(int) * N);
+
+    fd = open("./.ddtrace", O_RDONLY);
 }
 
 int main(int argc, char* argv[]) {
@@ -172,46 +185,47 @@ int main(int argc, char* argv[]) {
     while (1)
     {
         // read pipe one line;
-        char buf[2][128] = {0x0};
+        char buf[2][128] = {{0x0},{0x0}}; // 0 for 
 
         pipe_read(buf[0], 128);
-        pipe_read(buf[1], 128);
 
         // identify command
         char command[16] = {0x0};
         pthread_t tid = 0;
         int addr = 0;
         if (sscanf(buf[0], "%s %lu %p", command, &tid, &addr) == -1) break; // exit when read failed.
-        printf("ddchck> received from pipe: %s %lu %p\n", command, tid, addr);
-
-        char tmp[128] = {'\0'};
-        int addr_int = 0;
-        sscanf(buf[1], "%s [%x]", tmp, &addr_int); // extract stack info.
-        //printf("%x\n", addr_int);
-        sprintf(address, "0x%x", addr_int);
-        //printf("%s, %s\n", name, address);
+        printf("-----------------\nddchck> pipe message: %s", buf[0]);
+        //printf("ddchck> received from pipe: %s %lu %p\n", command, tid, addr);
 
         int t_idx = find_thread_idx(tid);
 
         if (t_idx == -1) { // make new thread
             t_idx = t_size++;
             t_table[t_idx] = tid;
-            printf("ddchck> new thread, current threads: %d\n", t_size);
+            //printf("ddchck> new thread, current threads: %d\n", t_size);
         }
         printf("ddchck> t_idx: %d\n", t_idx);
         // do that command
         if (strcmp("lock", command) == 0){ // pthread mutex lock
-            printf("ddchck> lock\n");
+            pipe_read(buf[1], 128); // read stack info
+            char tmp[128] = {'\0'};
+            int addr_int = 0;
+            sscanf(buf[1], "%s [%x]", tmp, &addr_int); // extract stack info.
+            //printf("%x\n", addr_int);
+            sprintf(address, "0x%x", addr_int);
+            //printf("%s, %s\n", name, address);
+            
+            //printf("ddchck> lock\n");
 
             int l_idx = find_mutex_idx(addr);
-            printf("ddchck> l_idx: %d\n", l_idx);
             if (l_idx == -1) {
                 l_idx = push_mutex(addr);
             }
+            printf("ddchck> l_idx: %d\n", l_idx);
             lock(t_idx, l_idx);
         }
         else if (strcmp("unlock", command) == 0) { // pthread mutex unlock
-            printf("ddchck> unlock\n");
+            //printf("ddchck> unlock\n");
             pop_mutex(t_idx, addr);
         }
         else {
@@ -221,5 +235,6 @@ int main(int argc, char* argv[]) {
         // repeat until program exit.
     }
 
+    close(fd);
     return 0;
 }

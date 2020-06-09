@@ -1,0 +1,26 @@
+{
+	"version": "2.0.0",
+	"echoCommand": true,
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "gcc build active file",
+			"command": "gcc",
+			"args": [
+				"-g",
+				"chat.c",
+				// "-pthread",
+				"-o",
+				"chat",
+				"-pthread"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		}
+	]
+}

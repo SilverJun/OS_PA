@@ -12,47 +12,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+//static pthread_mutex_t pipe_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void pipe_write(char* buf, int size) {
-    int fd = open("./.ddtrace", O_WRONLY | O_SYNC);
+    //pthread_mutex_lock(&pipe_lock);
+    int fd = open("./.ddtrace", O_WRONLY | O_APPEND);
     write(fd, buf, size);
+    //pthread_mutex_unlock(&pipe_lock);
 }
 
-
-// int pthread_create(pthread_t * __newthread,
-// 			   const pthread_attr_t * __attr,
-// 			   void *(*__start_routine) (void *),
-// 			   void * __arg) {
-//     int (*orig_func)(pthread_t * __newthread,
-// 			   const pthread_attr_t * __attr,
-// 			   void *(*__start_routine) (void *),
-// 			   void * __arg);
-// 	char* error;
-	
-// 	orig_func = dlsym(RTLD_NEXT, "pthread_create");
-// 	if ((error = dlerror()) != 0x0) {
-// 	    fputs(error, stderr);
-// 		exit(1);
-//     }
-
-// 	return orig_func(__newthread, __attr, __start_routine, __arg);
-// }
-
-// int pthread_join(pthread_t __th, void **__thread_return) {
-//     int (*orig_func)(pthread_t __th, void **__thread_return); 
-// 	char* error;
-	
-// 	orig_func = dlsym(RTLD_NEXT, "pthread_join");
-// 	if ((error = dlerror()) != 0x0) {
-// 	    fputs(error, stderr);
-// 		exit(1);
-//     }
-// 	return orig_func(__th, __thread_return);
-// }
-
 int pthread_mutex_lock(pthread_mutex_t* mutex) {
-    static __thread int n_call = 0 ; //https://gcc.gnu.org/onlinedocs/gcc-3.3/gcc/Thread-Local.html
-	n_call += 1 ;
+    static __thread int n_lock = 0 ;
+	n_lock += 1 ;
 
     int (*orig_mutex_lock)(pthread_mutex_t* mutex); 
     char* error;
@@ -63,14 +34,12 @@ int pthread_mutex_lock(pthread_mutex_t* mutex) {
         exit(1);
     }
 
-    if (n_call == 1)
+    if (n_lock == 1)
     {
-        //printf("ddmon> mutex lock\n");
         
         // pipe write
-        char buf[128] = {0x0};
+        char buf[256] = {0x0};
         sprintf(buf, "lock %lu %p\n", pthread_self(), mutex);
-        //printf("ddmon> command: %s\n", buf);
 		void * arr[10] ;
 		char ** stack ;
 
@@ -83,22 +52,23 @@ int pthread_mutex_lock(pthread_mutex_t* mutex) {
          * [2] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf0) [...]
          * [3] ./abba() [...]
          */
-        //printf("ddmon> stack[1]: %s\n", stack[1]);
+        printf("ddmon> mutex lock\n");
+        printf("ddmon> stack[1]: %s\n", stack[1]);
         strcat(buf, stack[1]);
         strcat(buf, "\n");
-        //printf("ddmon> command: %s\n", buf);
+        printf("ddmon> command: %s\n", buf);
         pipe_write(buf, strlen(buf));
     }
 
     // pthread_mutex_lock call
 	int ret = orig_mutex_lock(mutex);
-    n_call -= 1;
+    n_lock -= 1;
 	return ret;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t* mutex) {
-    static __thread int n_call = 0 ; //https://gcc.gnu.org/onlinedocs/gcc-3.3/gcc/Thread-Local.html
-	n_call += 1 ;
+    static __thread int n_unlock = 0 ;
+	n_unlock += 1 ;
 
     int (*orig_mutex_unlock)(pthread_mutex_t* mutex); 
 	char* error;
@@ -109,22 +79,18 @@ int pthread_mutex_unlock(pthread_mutex_t* mutex) {
         exit(1);
     }
 
-    if (n_call == 1) {
-        //printf("ddmon> mutex unlock\n");
-        
-        // pthread_mutex_unlock call
-        int ret = orig_mutex_unlock(mutex);
+    // pthread_mutex_unlock call
+    int ret = orig_mutex_unlock(mutex);
 
+    if (n_unlock == 1) {
         // pipe write
-        char buf[128] = {0x0};
+        char buf[256] = {0x0};
         sprintf(buf, "unlock %lu %p\n", pthread_self(), mutex);
-        //printf("ddmon> command: %s\n", buf);
+        printf("ddmon> mutex unlock\n");
+        printf("ddmon> command: %s\n", buf);
         pipe_write(buf, strlen(buf));
-
-        n_call -= 1;
-	    return ret;
     }
 
-    n_call -= 1;
-    return orig_mutex_unlock(mutex);
+    n_unlock -= 1;
+    return ret;
 }

@@ -102,6 +102,18 @@ srealloc (void * p, size_t newsize)
 
 }
 
+sm_container_ptr
+_merge(sm_container_ptr p1, sm_container_ptr p2) // merge p1 p2
+{
+	// merge to p1
+	p1->dsize += p2->dsize + sizeof(sm_container_t);
+
+	// link connect
+	p2->next->prev = p1;
+	p1->next = p2->next;
+	return p1;
+}
+
 void 
 sfree (void * p)
 {
@@ -109,6 +121,14 @@ sfree (void * p)
 	for (itr = sm_head.next ; itr != &sm_head ; itr = itr->next) {
 		if (p == _data(itr)) {
 			itr->status = Unused ;
+
+			while(itr->prev->status != Busy) {
+				itr = _merge(itr->prev, itr);
+			}
+			while(itr->next->status != Busy) {
+				itr = _merge(itr, itr->next);
+			}
+
 			break ;
 		}
 	}

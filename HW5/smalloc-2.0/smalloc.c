@@ -1,7 +1,9 @@
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <stdio.h>
 #include <limits.h>
-#include "smalloc.h" 
+#include "smalloc.h"
+#include <errno.h>
 
 /**
  * struct _sm_container_t {
@@ -59,7 +61,6 @@ retain_more_memory (int size)
 	return hole ;
 }
 
-// TODO : First fit -> Best fit
 void * 
 smalloc (size_t size) 
 {
@@ -136,7 +137,22 @@ sfree (void * p)
 
 void sshrink()
 {
+	// sm_head의 prev 부터 시작해서 unused 카운트하고 brk로 프로그램 브레이크 지정.
+	sm_container_ptr itr ;
+	void* breakpoint = 0x0;
 
+	for (itr = sm_head.prev; itr != &sm_head ; itr = itr->prev) {
+		printf("%p\n", _data(itr));
+		printf("%s, %lu\n", itr->status == Busy?"Busy":"Unused", itr->dsize);
+		if (itr->status == Busy) break;
+	}
+	breakpoint = (void*)itr->next;
+	// link to head.
+	itr->next = &sm_head;
+	sm_head.prev = itr;
+	if (brk(breakpoint) != 0) { // 여기가 힙의 끝.
+		fprintf(stderr, "error code: %d", errno);
+	}
 }
 
 void 
@@ -160,8 +176,30 @@ print_sm_containers ()
 
 }
 
-
+/**
+ * print these following informations into stderr
+ * (1) the amount of memory retained by smalloc so far -> sum of all nodes
+ * (2) the amount of memory allocated by smalloc at this moment -> sum of busy nodes dsize
+ * (3) the amount of memory retained by smalloc but not currently allocated. -> sum of unused nodes dsize
+ */
 void print_mem_uses()
 {
+	size_t all_size = 0, busy_size = 0, unused_size = 0;
 
+	sm_container_ptr itr ;
+	for (itr = sm_head.next; itr != &sm_head ; itr = itr->next) {
+		all_size += itr->dsize+sizeof(sm_container_t);
+
+		if (itr->status == Busy) {
+			busy_size += itr->dsize;
+		}
+		else {
+			unused_size += itr->dsize;
+		}
+	}
+	
+	fprintf(stderr, "==================== sm_containers mem uses ====================\n");
+	fprintf(stderr, "the amount of memory retained by smalloc so far: %lu bytes\n", all_size);
+	fprintf(stderr, "the amount of memory allocated by smalloc at this moment: %lu bytes\n", busy_size);
+	fprintf(stderr, "the amount of memory retained by smalloc but not currently allocated: %lu bytes\n", unused_size);
 }

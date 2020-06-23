@@ -1,10 +1,12 @@
 #include <stdio.h>
+#include <unistd.h>
 #include "smalloc.h"
 
+extern char etext, edata, end ; 
 int 
 main()
 {
-	void *p1, *p2, *p3, *p4 ;
+	void *p1, *p2, *p3, *p4, *p5, *p6 ;
 
 	print_sm_containers() ;
 
@@ -23,4 +25,16 @@ main()
 	p4 = smalloc(500) ; 
 	printf("smalloc(1000):%p\n", p4) ; 
 	print_sm_containers() ;
+
+	print_mem_uses();
+
+	p5 = smalloc(2500) ; 
+	p6 = smalloc(2500) ; 
+	printf("program break at :  %p\n", sbrk(0)) ;
+	sfree(p6);
+	
+	sshrink();
+	printf("program break at :  %p\n", sbrk(0)) ;
+	print_sm_containers() ;
+	print_mem_uses();
 }

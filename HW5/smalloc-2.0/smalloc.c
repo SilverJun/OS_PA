@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <unistd.h>
 #include <stdio.h>
+#include <string.h>
 #include <limits.h>
 #include "smalloc.h"
 #include <errno.h>
@@ -61,6 +62,18 @@ retain_more_memory (int size)
 	return hole ;
 }
 
+sm_container_ptr
+_merge(sm_container_ptr p1, sm_container_ptr p2) // merge p1 p2
+{
+	// merge to p1
+	p1->dsize += p2->dsize + sizeof(sm_container_t);
+
+	// link connect
+	p2->next->prev = p1;
+	p1->next = p2->next;
+	return p1;
+}
+
 void * 
 smalloc (size_t size) 
 {
@@ -96,23 +109,41 @@ smalloc (size_t size)
 	return _data(best_hole) ;
 }
 
-
 void *
 srealloc (void * p, size_t newsize)
 {
+	sm_container_ptr best_hole = 0x0, itr = 0x0, p_node = 0x0;
+	// if p node can extends to newsize, extend it.
+	for (itr = sm_head.next ; itr != &sm_head ; itr = itr->next) {
+		if (_data(itr) == p) {
+			p_node = itr;
+			break;
+		}
+	}
 
-}
+	if (p_node == 0x0) return 0x0;
+	if (p_node->dsize == newsize) return _data(p_node);
 
-sm_container_ptr
-_merge(sm_container_ptr p1, sm_container_ptr p2) // merge p1 p2
-{
-	// merge to p1
-	p1->dsize += p2->dsize + sizeof(sm_container_t);
+	if (p_node->dsize > newsize) { // shrink case. no need to additional allocation.
+		sm_container_split(p_node, newsize);
+		return _data(p_node);
+	}
+	const size_t more_mem = newsize - p_node->dsize;
+	printf("%lu\n", more_mem);
+	if (p_node->next->status == Unused && p_node->next->dsize > more_mem) { // merge next unused page.
+		//memset(p_node->next, 0, p_node->dsize + sizeof(sm_container_t));
+		_merge(p_node, p_node->next);
+		sm_container_split(p_node, newsize);
+		return _data(p_node);
+	}
+	else {
+		void* newp = smalloc(newsize); // malloc newsize memmory.
+		memcpy(newp, p, newsize); // copy original data.
+		sfree(p); // free old memmory
+		return newp;
+	}
 
-	// link connect
-	p2->next->prev = p1;
-	p1->next = p2->next;
-	return p1;
+	return 0x0;
 }
 
 void 

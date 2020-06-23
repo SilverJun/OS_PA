@@ -129,7 +129,7 @@ srealloc (void * p, size_t newsize)
 		return _data(p_node);
 	}
 	const size_t more_mem = newsize - p_node->dsize;
-	printf("%lu\n", more_mem);
+	// printf("%lu\n", more_mem);
 	if (p_node->next->status == Unused && p_node->next->dsize > more_mem) { // merge next unused page.
 		//memset(p_node->next, 0, p_node->dsize + sizeof(sm_container_t));
 		_merge(p_node, p_node->next);
@@ -173,8 +173,8 @@ void sshrink()
 	void* breakpoint = 0x0;
 
 	for (itr = sm_head.prev; itr != &sm_head ; itr = itr->prev) {
-		printf("%p\n", _data(itr));
-		printf("%s, %lu\n", itr->status == Busy?"Busy":"Unused", itr->dsize);
+		//printf("%p\n", _data(itr));
+		//printf("%s, %lu\n", itr->status == Busy?"Busy":"Unused", itr->dsize);
 		if (itr->status == Busy) break;
 	}
 	breakpoint = (void*)itr->next;
@@ -182,7 +182,7 @@ void sshrink()
 	itr->next = &sm_head;
 	sm_head.prev = itr;
 	if (brk(breakpoint) != 0) { // 여기가 힙의 끝.
-		fprintf(stderr, "error code: %d", errno);
+		fprintf(stderr, "sshrink errno: %d", errno);
 	}
 }
 
